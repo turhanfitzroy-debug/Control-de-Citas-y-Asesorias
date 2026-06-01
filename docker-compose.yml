@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: citas_postgres
+    environment:
+      POSTGRES_USER: citas_user
+      POSTGRES_PASSWORD: citas_password
+      POSTGRES_DB: citas_asesorias_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - citas_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U citas_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # pgAdmin para gestión de BD (opcional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: citas_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    networks:
+      - citas_network
+    depends_on:
+      - postgres
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: citas_backend
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://citas_user:citas_password@postgres:5432/citas_asesorias_db
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - citas_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: npm run dev
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: citas_frontend
+    environment:
+      REACT_APP_API_URL: http://localhost:3001
+      REACT_APP_ENVIRONMENT: development
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - citas_network
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+
+networks:
+  citas_network:
+    driver: bridge
